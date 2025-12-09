@@ -1,0 +1,75 @@
+@startuml State Machine Diagram: Процесс записи на приём
+scale 0.8
+skinparam {
+  defaultFontSize 12
+  maxMessageSize 100
+}
+hide empty description
+
+title State Machine Diagram: Процесс записи на приём
+
+state "Начальная Страница" as Start
+state "Форма Регистрации" as Reg
+state "Ожидание Подтверждения" as WaitConfirm
+state "Форма Входа" as Login
+state "Ошибка Входа" as LoginError
+state "Профиль пациента" as PatientProfile
+state "Выбор Города" as City
+state "Выбор Поликлиники" as Clinic
+state "Выбор Типа Врача" as DoctorType
+state "Выбор Врача" as Doctor
+state "Выбор Времени" as Time
+state "Подтверждение Записи" as Confirm
+state "Запись Создана" as Created
+state "Запись Отменена" as Cancelled
+
+[*] --> Start
+
+Start --> Reg : "Нажал 'Зарегистрироваться'"
+Start --> Login : "Нажал 'Войти'"
+
+Reg --> WaitConfirm : "Заполнил форму\nи нажал 'Зарегистрироваться'"
+Reg --> Start : "Нажал 'Отмена'"
+
+WaitConfirm --> PatientProfile : "Email подтверждён"
+WaitConfirm --> LoginError : "Ссылка недействительна"
+
+Login --> PatientProfile : "Ввёл верные данные"
+Login --> LoginError : "Неверные данные"
+Login --> Start : "Нажал 'Отмена'"
+LoginError --> Login : "Попробовать снова"
+
+PatientProfile --> City : "Нажал 'Записаться на приём'"
+PatientProfile --> Start : "Нажал 'Выйти'"
+
+City --> Clinic : "Выбрал город"
+Clinic --> City : "Нажал 'Назад'"
+Clinic --> DoctorType : "Выбрал поликлинику"
+
+DoctorType --> Clinic : "Нажал 'Назад'"
+DoctorType --> Doctor : "Выбрал тип врача"
+
+Doctor --> DoctorType : "Нажал 'Назад'"
+Doctor --> Time : "Выбрал врача"
+
+Time --> Doctor : "Нажал 'Назад'"
+Time --> Confirm : "Выбрал время"
+
+Confirm --> Time : "Нажал 'Назад'"
+Confirm --> Created : "Нажал 'Подтвердить запись'"
+Confirm --> Cancelled : "Нажал 'Отменить'"
+
+Created --> PatientProfile : "Запись создана"
+Cancelled --> PatientProfile : "Запись отменена"
+
+note right of WaitConfirm
+  Система отправляет письмо
+  со ссылкой для подтверждения
+  Срок действия - 24 часа
+end note
+
+note right of LoginError
+  Неверный email или пароль
+  Недействительная ссылка подтверждения регистрации
+end note
+@enduml
