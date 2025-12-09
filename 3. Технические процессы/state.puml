@@ -43,17 +43,23 @@ PatientProfile --> City : "Нажал 'Записаться на приём'"
 PatientProfile --> Start : "Нажал 'Выйти'"
 
 City --> Clinic : "Выбрал город"
+City --> Cancelled : "Нажал 'Отменить'"
+
 Clinic --> City : "Нажал 'Назад'"
 Clinic --> DoctorType : "Выбрал поликлинику"
+Clinic --> Cancelled : "Нажал 'Отменить'"
 
 DoctorType --> Clinic : "Нажал 'Назад'"
 DoctorType --> Doctor : "Выбрал тип врача"
+DoctorType --> Cancelled : "Нажал 'Отменить'"
 
 Doctor --> DoctorType : "Нажал 'Назад'"
 Doctor --> Time : "Выбрал врача"
+Doctor --> Cancelled : "Нажал 'Отменить'"
 
 Time --> Doctor : "Нажал 'Назад'"
 Time --> Confirm : "Выбрал время"
+Time --> Cancelled : "Нажал 'Отменить'"
 
 Confirm --> Time : "Нажал 'Назад'"
 Confirm --> Created : "Нажал 'Подтвердить запись'"
