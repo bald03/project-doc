@@ -21,7 +21,7 @@ state "Выбор Врача" as Doctor
 state "Выбор Времени" as Time
 state "Подтверждение Записи" as Confirm
 state "Запись Создана" as Created
-state "Запись Отменена" as Cancelled
+state "Запись Отменена" as Created
 
 [*] --> Start
 
@@ -67,6 +67,9 @@ Confirm --> Cancelled : "Нажал 'Отменить'"
 
 Created --> PatientProfile : "Запись создана"
 Cancelled --> PatientProfile : "Запись отменена"
+
+Created --> [*]
+Cancelled --> [*]
 
 note right of WaitConfirm
   Система отправляет письмо
