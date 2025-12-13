@@ -1,0 +1,98 @@
+@startuml maintenance
+!theme vibrant
+
+package " Kubernetes" as k8s {
+  [Docker] as docker << (C, #FFAAAA) >>
+  [Containers] as containers << (C, #FFAAAA) >>
+}
+
+package "Медицинская система записи - обслуживание" as maintenance {
+    actor "Системный администратор" as sys_admin
+    package "Система мониторинга" as monitoring_system {
+    [Prometheus (PROD)] as prometheus_prod << (C, #FFAAAA) >>
+    [Prometheus (QA)] as prometheus_qa << (C, #FFAAAA) >>
+    [Система визуализации Grafana] as grafana << (C, #FFAAAA) >>
+    [Alertmanager] as alertmanager << (C, #FFAAAA) >>
+    [Логирование (ELK)] as logging << (C, #FFAAAA) >>
+    }
+    [Система бэкапов] as backup_service << (C, #FFAAAA) >>
+}
+
+package "Внешние сервисы" as outer_services {
+    package "Каналы уведомлений" as notifications {
+        [Почтовый шлюз] as email_service << (C, #FFAAAA) >>
+        [SMS провайдер] as sms_service << (C, #FFAAAA) >>
+    }
+}
+
+package "Разработка" as development {
+    actor "Разработчик" as developer
+    [Система контроля версий (Git)] as vcs << (C, #FFAAAA) >>
+    
+    package "CI/CD Pipeline" as cicd {
+      [CI/CD (Ветка prod)] as cicd_prod << (C, #FFAAAA) >>
+      [CI/CD (Ветка qa)] as cicd_qa << (C, #FFAAAA) >>
+    }
+    
+    
+    
+    package "CI/CD Pipeline (QA)" as build_qa {
+      [Build Stage QA] as buildstage_qa << (C, #FFAAAA) >>
+      [Testing Stage QA] as testingstage_qa << (C, #FFAAAA) >>
+    }
+    
+    
+
+    [Реестр контейнеров] as containeregistry << (C, #FFAAAA) >>
+
+    package "CI/CD Pipeline (PROD)" as build_prod {
+      [Build Stage] as buildstage_prod << (C, #FFAAAA) >>
+      [Testing Stage] as testingstage_prod << (C, #FFAAAA) >>
+    }
+}
+
+sys_admin --> monitoring_system : "Мониторинг состояния системы"
+sys_admin --> backup_service : "Контроль и восстановление данных"
+grafana --> prometheus_prod : "PromQL"
+grafana --> prometheus_qa : "PromQL"
+prometheus_prod --> containers : "Проверка состояния (prod)"
+prometheus_qa --> containers : "Проверка состояния (qa)"
+prometheus_prod --> alertmanager : "Алерты"
+prometheus_qa --> alertmanager : "Алерты"
+alertmanager --> notifications : "Уведомления о сбоях и предупреждениях"
+containers --> logging : "Отправка логов"
+logging --> alertmanager : "Алерты по логам"
+developer --> vcs : "PUSH коммитов"
+vcs --> cicd_prod : "CI/CD для PROD"
+vcs --> cicd_qa : "CI/CD для QA"
+ 
+
+ ' CI/CD metrics -> monitoring
+cicd_qa --> prometheus_qa : "Метрики пайплайна"
+cicd_prod --> prometheus_prod : "Метрики пайплайна"
+
+cicd_prod --> buildstage_prod : "Запуск pipeline"
+
+buildstage_prod --> containeregistry : "Сборка Docker-образов и PUSH"
+
+containeregistry <-- testingstage_prod : "PULL Docker-образов"
+
+buildstage_prod --> testingstage_prod : "PASS"
+
+testingstage_prod --> docker : "PULL обновлений [SSH] (Тэг prod)"
+
+
+buildstage_qa --> containeregistry : "Сборка Docker-образов и PUSH"
+
+containeregistry <-- testingstage_qa : "PULL Docker-образов"
+
+buildstage_qa --> testingstage_qa : "PASS"
+
+testingstage_qa --> docker : "PULL обновлений [SSH] (Тэг qa)"
+
+docker --> containeregistry : "PULL Docker-образов"
+docker --> containers : "Обновление и развёртка контейнеров"
+
+backup_service --> containers : "Создание и восстановление бэкапов"
+
+@enduml

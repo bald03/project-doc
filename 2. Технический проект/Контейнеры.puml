@@ -1,0 +1,99 @@
+@startuml
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Медицинская система записи - Диаграмма контейнеров
+
+Person(пациент, "Пациент", "Записывается на приём, просматривает историю приёмов, оставляет отзывы")
+Person(врач, "Врач/Специалист", "Просматривает расписание, ведёт приёмы, вносит записи")
+Person(админ, "Административный персонал", "Управляет расписанием и настройками клиник")
+Person(сисадмин, "Системный администратор", "Настройка, безопасность, резервное копирование")
+
+System_Boundary(ms, "Медицинская система записи") {
+    Container(web_app, "Веб-клиент", "React + TypeScript", "Веб-интерфейс для пациентов и персонала")
+    Container(mobile_app, "Мобильное приложение", "React Native (Expo)", "Android/iOS приложение для пациентов")
+
+    Container(api_gateway, "API Gateway", "Envoy / Ingress", "Точка входа для всех внешних запросов, rate limiting, auth")
+
+    Container(auth_service, "Auth Service", "C# (.NET)", "OAuth2/OIDC, управление сессиями, PKCE для мобильных")
+    Container(appointment_service, "Appointment Service", "C# (.NET)", "Управление записями: создание, изменение, отмена, расписание")
+    Container(patient_service, "Patient Service", "C# (.NET)", "Профили пациентов, мед. история (метаданные)")
+    Container(clinician_service, "Clinician Service", "C# (.NET)", "Управление врачами, расписаниями, доступами")
+    Container(notification_service, "Notification Service", "C# (.NET)", "Отправка Email/SMS/push уведомлений")
+    Container(file_service, "File Service", "C# (.NET)", "Хранение и трансфер медицинских файлов (в т.ч. загрузки)")
+    Container(background_worker, "Background Worker", ".NET Worker", "Асинхронная обработка задач, очереди, интеграции")
+
+    ContainerDb(postgres, "Основная БД", "PostgreSQL", "Хранит основные данные: пользователи, записи, расписания")
+    ContainerDb(redis, "Cache/Session", "Redis", "Кеширование, сессии, rate limiting")
+    ContainerDb(message_broker, "Message Broker", "RabbitMQ", "Асинхронные события и очереди")
+    ContainerDb(object_storage, "Объектное хранилище", "Yandex Object Storage (S3)", "Хранение файлов и документов")
+}
+
+System_Ext(idp, "Identity Provider (SAML/OIDC)", "OAuth2/OIDC")
+System_Ext(sms_email, "Провайдер SMS/Email", "API")
+System_Ext(внешняя_мис, "Внешняя МИС", "API/HTTPS")
+System_Ext(внешняя_лис, "Внешняя ЛИС", "API/HTTPS")
+System_Ext(система_резервного_копирования, "Система резервного копирования", "API/HTTPS")
+
+' Пользовательские связи
+Rel(пациент, web_app, "Использует", "HTTPS")
+Rel(пациент, mobile_app, "Использует", "HTTPS")
+Rel(врач, web_app, "Использует", "HTTPS")
+Rel(админ, web_app, "Управляет", "HTTPS")
+Rel(сисадмин, web_app, "Настраивает", "HTTPS")
+
+' Клиенты к API
+Rel(web_app, api_gateway, "API requests", "HTTPS/JSON")
+Rel(mobile_app, api_gateway, "API requests (PKCE)", "HTTPS/JSON")
+
+' API Gateway к сервисам
+Rel(api_gateway, auth_service, "Auth / token validation", "HTTPS/OpenID")
+Rel(api_gateway, appointment_service, "API /appointments", "gRPC/HTTP")
+Rel(api_gateway, patient_service, "API /patients", "gRPC/HTTP")
+Rel(api_gateway, clinician_service, "API /clinicians", "gRPC/HTTP")
+Rel(api_gateway, file_service, "API /files (presigned)", "HTTPS/S3")
+Rel(api_gateway, notification_service, "API /notifications", "HTTP")
+
+' Сервисы к БД и хранилищу
+Rel(appointment_service, postgres, "Read/Write appointments", "SQL")
+Rel(patient_service, postgres, "Read/Write patient data", "SQL")
+Rel(clinician_service, postgres, "Read/Write clinician data", "SQL")
+Rel(auth_service, postgres, "Read/Write user data", "SQL")
+Rel(file_service, object_storage, "Store files", "S3 API (Yandex)")
+Rel(notification_service, sms_email, "Send messages", "API/HTTPS")
+
+' Асинхронные связи
+Rel(appointment_service, message_broker, "Publish events (appointment.created, appointment.cancelled)", "AMQP")
+Rel(background_worker, message_broker, "Consume events", "AMQP")
+Rel(background_worker, file_service, "Process files / virus-scan", "gRPC")
+Rel(background_worker, notification_service, "Trigger notifications", "gRPC")
+
+' Кеш и сессии
+Rel(api_gateway, redis, "Rate limit / sessions / cache", "Redis protocol")
+Rel(auth_service, redis, "Session storage", "Redis protocol")
+Rel(appointment_service, redis, "Cache schedule data", "Redis protocol")
+
+' Внешние интеграции
+Rel(auth_service, idp, "Federated auth (OIDC)", "OAuth2/OIDC")
+Rel(background_worker, внешняя_мис, "Import/export schedules, directories (МКБ-10)", "API/HTTPS")
+Rel(background_worker, внешняя_лис, "Import research results", "API/HTTPS")
+Rel(background_worker, система_резервного_копирования, "Backup operations", "API/HTTPS")
+
+' Взаимодействия между сервисами
+Rel(appointment_service, patient_service, "Validate patient data", "gRPC")
+Rel(appointment_service, clinician_service, "Get schedule and clinician info", "gRPC")
+Rel(notification_service, patient_service, "Get patient contact info", "gRPC")
+
+@enduml
+r_service, file_service, "Сохранение документов", "gRPC")
+
+' Внешние интеграции
+Rel(payment_service, платежный_шлюз, "Инициирует платежи, проверяет статусы", "API/HTTPS")
+Rel(moderation_service, верификатор_документов, "Отправляет документы на верификацию", "API/HTTPS")
+
+@enduml
+Rel(moderation_service, верификатор_документов, "Отправляет документы на верификацию", "API/HTTPS")
+
+@enduml
+Rel(moderation_service, верификатор_документов, "Отправляет документы на верификацию", "API/HTTPS")
+
+@enduml

@@ -1,0 +1,66 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Appointment Service - Диаграмма компонентов (Уровень 3)
+
+Container(appointment_service_container, "Appointment Service", "C# (.NET)", "Микросервис для управления записями на приём")
+
+System_Boundary(appointment_service_boundary, "Appointment Service") {
+    Component(api_handler, "API Handler", "gRPC/HTTP", "Обрабатывает все gRPC и HTTP API запросы записей")
+
+    Component(appointment_service, "Appointment Service", "C#", "Основная бизнес-логика: создание, изменение, отмена записей")
+
+    Component(appointment_repository, "Appointment Repository", "C# Entity Framework Core", "Управление записями на приём")
+    Component(schedule_repository, "Schedule Repository", "C# Entity Framework Core", "Управление расписанием врачей и слотами")
+    Component(waitlist_repository, "Waitlist Repository", "C# Entity Framework Core", "Управление листом ожидания")
+
+    Component(patient_adapter, "Patient Adapter", "C# gRPC Client", "Адаптер для вызовов Patient Service")
+    Component(clinician_adapter, "Clinician Adapter", "C# gRPC Client", "Адаптер для вызовов Clinician Service")
+    Component(cache_adapter, "Cache Adapter", "C# StackExchange.Redis", "Адаптер для работы с Redis кешем")
+    Component(dispatcher, "Dispatcher", "C#", "Отправка событий в Outbox таблицу")
+
+    Component(outbox_reader, "Outbox Reader", "C# Background Service", "Чтение событий из Outbox и отправка в RabbitMQ")
+    Component(event_handler, "EventHandler", "C#", "Обработчик входящих событий из RabbitMQ")
+}
+
+ContainerDb(postgres_db, "PostgreSQL", "SQL Database", "Хранилище записей, расписаний, слотов и outbox")
+ContainerDb(redis_cache, "Redis", "Cache", "Кеширование расписаний и доступных слотов")
+Container(rabbitmq, "RabbitMQ", "Erlang", "Брокер сообщений")
+Container(patient_service, "Patient Service", "C# (.NET)", "Микросервис пациентов")
+Container(clinician_service, "Clinician Service", "C# (.NET)", "Микросервис врачей")
+
+' Связи Appointment Service с репозиториями и адаптерами
+Rel(appointment_service, appointment_repository, "Управление записями", "C# calls")
+Rel(appointment_service, schedule_repository, "Управление расписанием", "C# calls")
+Rel(appointment_service, waitlist_repository, "Управление листом ожидания", "C# calls")
+Rel(appointment_service, patient_adapter, "Валидация данных пациента", "C# calls")
+Rel(appointment_service, clinician_adapter, "Получение расписания врача", "C# calls")
+Rel(appointment_service, cache_adapter, "Кеширование расписаний", "C# calls")
+Rel(appointment_service, dispatcher, "Отправка событий в outbox", "C# calls")
+
+' Связи API Handler
+Rel(api_handler, appointment_service, "Вызывает операции записей", "C# calls")
+
+' Связи репозиториев с базой данных
+Rel(appointment_repository, postgres_db, "Чтение/запись записей", "SQL")
+Rel(schedule_repository, postgres_db, "Чтение/запись расписаний и слотов", "SQL")
+Rel(waitlist_repository, postgres_db, "Чтение/запись листа ожидания", "SQL")
+
+' Связи адаптеров
+Rel(patient_adapter, patient_service, "gRPC вызовы", "gRPC")
+Rel(clinician_adapter, clinician_service, "gRPC вызовы", "gRPC")
+Rel(cache_adapter, redis_cache, "Кеширование/получение данных", "Redis protocol")
+
+' Связи Dispatcher с Outbox (в той же PostgreSQL)
+Rel(dispatcher, postgres_db, "Сохраняет события в outbox", "SQL")
+
+' Связи Outbox Reader
+Rel(outbox_reader, postgres_db, "Читает события из outbox", "SQL")
+Rel(outbox_reader, rabbitmq, "Отправляет события в RabbitMQ", "AMQP")
+
+' Связи EventHandler (входящие события)
+Rel(rabbitmq, event_handler, "Получает события из RabbitMQ", "AMQP")
+Rel(event_handler, appointment_service, "Вызывает обработку событий", "C# calls")
+
+@enduml

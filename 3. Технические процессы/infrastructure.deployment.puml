@@ -1,0 +1,98 @@
+@startuml C4 Infrastructure Diagram - Медицинская система записи
+left to right direction
+!define C4P https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master
+!includeurl C4P/C4_Container.puml
+
+title C4 Infrastructure Diagram - Медицинская система записи
+
+package "Облачная инфраструктура Yandex Cloud" as cloud {
+    Container(nginx, "Nginx", "Nginx", "Обратный прокси и балансировщик нагрузки")
+    Container(envoy_gateway, "API Gateway", "Envoy", "Маршрутизация API, rate limiting, auth")
+
+    package "Kubernetes Cluster" as k8s_cluster {
+        package "Auth Pod" as auth_pod {
+            Container(auth_service, "Auth Service", "C# (.NET)", "OAuth2/OIDC, управление сессиями")
+        }
+
+        package "Appointment Pod" as appointment_pod {
+            Container(appointment_service, "Appointment Service", "C# (.NET)", "Управление записями на приём")
+        }
+
+        package "Patient Pod" as patient_pod {
+            Container(patient_service, "Patient Service", "C# (.NET)", "Профили пациентов, мед. история")
+        }
+
+        package "Clinician Pod" as clinician_pod {
+            Container(clinician_service, "Clinician Service", "C# (.NET)", "Управление врачами и расписаниями")
+        }
+
+        package "Notification Pod" as notification_pod {
+            Container(notification_service, "Notification Service", "C# (.NET)", "Отправка Email/SMS/push уведомлений")
+        }
+
+        package "File Pod" as file_pod {
+            Container(file_service, "File Service", "C# (.NET)", "Хранение и трансфер медицинских файлов")
+        }
+
+        package "Background Worker Pod" as worker_pod {
+            Container(background_worker, "Background Worker", ".NET Worker", "Асинхронная обработка задач, интеграции")
+        }
+    }
+
+    Container(rabbitmq, "Шина событий", "RabbitMQ", "Обмен сообщениями между сервисами")
+    Container(redis_cluster, "Redis Cluster", "Redis", "Кэширование, сессии, rate limiting")
+}
+
+package "Database Cluster" as database {
+    Container(database_master, "PostgreSQL Master", "PostgreSQL", "Основная база данных (запись)")
+    Container(database_replica, "PostgreSQL Replica", "PostgreSQL", "Реплика базы данных для чтения")
+}
+
+package "Object Storage" as storage {
+    Container(yandex_storage, "Yandex Object Storage", "S3 Compatible", "Хранение медицинских файлов и документов")
+}
+
+System_Ext(sms_email, "Провайдер SMS/Email", "API")
+System_Ext(внешняя_мис, "Внешняя МИС", "API/HTTPS")
+System_Ext(внешняя_лис, "Внешняя ЛИС", "API/HTTPS")
+System_Ext(система_резервного_копирования, "Система резервного копирования", "API/HTTPS")
+
+' Связи с базой данных
+Rel(k8s_cluster, database_master, "Чтение/запись", "Entity Framework Core / Npgsql")
+Rel(appointment_service, database_replica, "Read-only", "Entity Framework Core")
+Rel(patient_service, database_replica, "Read-only", "Entity Framework Core")
+Rel(clinician_service, database_replica, "Read-only", "Entity Framework Core")
+Rel(database_master, database_replica, "Репликация данных", "Streaming Replication")
+
+' Связи с кешем
+Rel(k8s_cluster, redis_cluster, "Кэширование данных", "StackExchange.Redis")
+Rel(envoy_gateway, redis_cluster, "Rate limit / sessions", "Redis protocol")
+Rel(auth_service, redis_cluster, "Session storage", "Redis protocol")
+Rel(appointment_service, redis_cluster, "Cache schedule data", "Redis protocol")
+
+' Связи с объектным хранилищем
+Rel(file_service, yandex_storage, "Хранение файлов", "S3 API")
+
+' Внешние системы
+Rel(notification_service, sms_email, "Отправка уведомлений", "REST API")
+Rel(background_worker, внешняя_мис, "Импорт/экспорт расписаний, справочники (МКБ-10)", "REST API")
+Rel(background_worker, внешняя_лис, "Импорт результатов исследований", "REST API")
+Rel(background_worker, система_резервного_копирования, "Резервное копирование", "REST API")
+
+' RabbitMQ — события
+Rel(appointment_service, rabbitmq, "Публикация событий записей", "AMQP")
+Rel(background_worker, rabbitmq, "Потребление событий", "AMQP")
+Rel(notification_service, rabbitmq, "Чтение событий уведомлений", "AMQP")
+
+' Взаимодействия между сервисами
+Rel(appointment_service, patient_service, "Валидация данных пациента", "gRPC")
+Rel(appointment_service, clinician_service, "Получение расписания врача", "gRPC")
+Rel(notification_service, patient_service, "Получение контактов пациента", "gRPC")
+Rel(background_worker, file_service, "Обработка файлов / антивирус", "gRPC")
+Rel(background_worker, notification_service, "Триггер уведомлений", "gRPC")
+
+' Балансировка нагрузки
+Rel(nginx, envoy_gateway, "Проксирование запросов", "HTTPS")
+Rel(envoy_gateway, k8s_cluster, "Маршрутизация к сервисам", "gRPC/HTTP")
+
+@enduml
